@@ -4,7 +4,7 @@ import * as v from "valibot";
 import { browser } from "$app/environment";
 
 /**
- * To be called in a server file.
+ * To be called in a server-only file.
  * Defines a remote function with input validation. The function will be available on the client after calling `createClientApi`.
  */
 export function defineRemoteFn<TInputSchema extends v.GenericSchema, TOutput>(

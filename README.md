@@ -1,42 +1,128 @@
-# sv
+# custom-remote-fns
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+Type-safe RPC for SvelteKit. Define server-side functions once, call them from anywhere (server load functions, client components, actions) with full TypeScript inference and automatic input validation via [Valibot](https://valibot.dev/).
 
-## Creating a project
+## How it works
 
-If you're seeing this, you've probably already done this step. Congrats!
+1. Define functions on the server with `defineRemoteFn(schema, handler)`
+2. Aggregate them into an API object and register the handler in `hooks.server.ts`
+3. Create a typed interface with `createRemoteFnInterface<typeof serverApi>()`
+4. Call functions anywhere — the client proxy sends a `POST /api/remote/<path>` request automatically
 
-```sh
-# create a new project
-npx sv create my-app
+## Setup
+
+### 1. Define your server functions
+
+```ts
+// src/lib/functions/server/users.ts
+import { defineRemoteFn } from "$lib/functions/types";
+import * as v from "valibot";
+
+export const usersApi = {
+  getUser: defineRemoteFn(v.object({ id: v.string() }), async ({ id }) => {
+    return { id, name: "Alice" };
+  }),
+
+  listUsers: defineRemoteFn(
+    v.never(), // no input
+    async () => {
+      return [
+        { id: "1", name: "Alice" },
+        { id: "2", name: "Bob" },
+      ];
+    },
+  ),
+} as const;
 ```
 
-To recreate this project with the same configuration:
+### 2. Aggregate into a single API
 
-```sh
-# recreate this project
-bun x sv@0.15.1 create --template minimal --types ts --install bun custom-remote-fns
+```ts
+// src/lib/functions/server/index.ts
+import { createServerFunctionsHandler } from "$lib/functions/types";
+import { usersApi } from "./users";
+
+export const serverApi = {
+  users: usersApi,
+} as const;
+
+export const serverFunctionsHandler = createServerFunctionsHandler(serverApi);
 ```
 
-## Developing
+### 3. Register the handler
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+```ts
+// src/hooks.server.ts
+import { serverFunctionsHandler } from "$lib/functions/server";
 
-```sh
-npm run dev
+export const handle = serverFunctionsHandler;
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
+// Or compose with other handlers using SvelteKit's `sequence`:
+// export const handle = sequence(serverFunctionsHandler, otherHandler);
 ```
 
-## Building
+### 4. Create the interface
 
-To create a production version of your app:
+```ts
+// src/lib/functions/index.ts
+import { createRemoteFnInterface } from "$lib/functions/types";
+import type { serverApi } from "./server"; // IMPORTANT: `import type`
 
-```sh
-npm run build
+export const api = createRemoteFnInterface<typeof serverApi>();
+// Note that the `api` can be used from the server AND the client.
 ```
 
-You can preview the production build with `npm run preview`.
+### 5. Register the SvelteKit fetch in the root layout
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+This ensures client-side `load` functions use SvelteKit's native fetch (with cookie forwarding, relative URLs, etc.) rather than the global `fetch`.
+
+```ts
+// src/routes/+layout.ts
+import { setBrowserSvelteKitFetch } from "$lib/functions/types";
+
+export const load = async ({ fetch }) => {
+  setBrowserSvelteKitFetch(fetch);
+};
+```
+
+## Usage
+
+```ts
+import { clientApi } from "$lib/functions";
+
+await clientApi.users.listUsers();
+const user = await clientApi.users.getUser({ id: "1" });
+```
+
+## Input validation
+
+Input schemas are validated on the server using Valibot. If validation fails, the server responds with `400` and the list of issues. For functions that take no input, use `v.never()` as the schema.
+
+```ts
+defineRemoteFn(
+  v.object({
+    email: v.pipe(v.string(), v.email()),
+    age: v.pipe(v.number(), v.minValue(0)),
+  }),
+  async ({ email, age }) => {
+    /* ... */
+  },
+);
+```
+
+## HTTP protocol
+
+Each remote function maps to a route:
+
+```
+POST /api/remote/<namespace>/<functionName>
+Content-Type: application/json
+
+{ ...input }
+```
+
+| Status | Meaning                                          |
+| ------ | ------------------------------------------------ |
+| `200`  | Success — response body is the JSON return value |
+| `400`  | Validation error — body contains Valibot issues  |
+| `404`  | Function not found                               |
