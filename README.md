@@ -1,4 +1,4 @@
-# custom-remote-fns
+# Tiny Remote Functions
 
 Type-safe RPC for SvelteKit. Define server-side functions once, call them from anywhere (server load functions, client components, actions) with full TypeScript inference and automatic input validation via [Valibot](https://valibot.dev/).
 
