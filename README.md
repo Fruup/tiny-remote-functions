@@ -74,7 +74,7 @@ export const api = createRemoteFnInterface<typeof serverApi>();
 
 ### 5. Register the SvelteKit fetch in the root layout
 
-This ensures client-side `load` functions use SvelteKit's native fetch (with cookie forwarding, relative URLs, etc.) rather than the global `fetch`.
+This ensures client-side remote procedure calls use [SvelteKit's native fetch](https://svelte.dev/docs/kit/web-standards#Fetch-APIs) rather than the global `fetch`.
 
 ```ts
 // src/routes/+layout.ts
