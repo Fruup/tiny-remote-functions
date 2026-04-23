@@ -14,42 +14,32 @@ Type-safe RPC for SvelteKit. Define server-side functions once, call them from a
 ### 1. Define your server functions
 
 ```ts
-// src/lib/functions/server/users.ts
-import { defineRemoteFn } from "$lib/functions/types";
-import * as v from "valibot";
-
-export const usersApi = {
-  getUser: defineRemoteFn(v.object({ id: v.string() }), async ({ id }) => {
-    return { id, name: "Alice" };
-  }),
-
-  listUsers: defineRemoteFn(
-    v.never(), // no input
-    async () => {
-      return [
-        { id: "1", name: "Alice" },
-        { id: "2", name: "Bob" },
-      ];
-    },
-  ),
-} as const;
-```
-
-### 2. Aggregate into a single API
-
-```ts
 // src/lib/functions/server/index.ts
 import { createServerFunctionsHandler } from "$lib/functions/types";
 import { usersApi } from "./users";
 
 export const serverApi = {
-  users: usersApi,
+  users: {
+    getUser: defineRemoteFn(v.object({ id: v.string() }), async ({ id }) => {
+      return { id, name: "Alice" };
+    }),
+
+    listUsers: defineRemoteFn(
+      v.never(), // no input
+      async () => {
+        return [
+          { id: "1", name: "Alice" },
+          { id: "2", name: "Bob" },
+        ];
+      },
+    ),
+  },
 } as const;
 
 export const serverFunctionsHandler = createServerFunctionsHandler(serverApi);
 ```
 
-### 3. Register the handler
+### 2. Register the handler
 
 ```ts
 // src/hooks.server.ts
@@ -61,7 +51,7 @@ export const handle = serverFunctionsHandler;
 // export const handle = sequence(serverFunctionsHandler, otherHandler);
 ```
 
-### 4. Create the interface
+### 3. Create the interface
 
 ```ts
 // src/lib/functions/index.ts
@@ -72,7 +62,7 @@ export const api = createRemoteFnInterface<typeof serverApi>();
 // Note that the `api` can be used from the server AND the client.
 ```
 
-### 5. Register the SvelteKit fetch in the root layout
+### 4. Register the SvelteKit fetch in the root layout
 
 This ensures client-side remote procedure calls use [SvelteKit's native fetch](https://svelte.dev/docs/kit/web-standards#Fetch-APIs) rather than the global `fetch`.
 
